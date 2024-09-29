@@ -64,6 +64,9 @@ pub struct LoggingOptions {
 
     /// The tracing sample ratio.
     pub tracing_sample_ratio: Option<TracingSampleOptions>,
+
+    /// The maximum number of log files.
+    pub max_log_files: usize,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,6 +84,7 @@ impl PartialEq for LoggingOptions {
             && self.otlp_endpoint == other.otlp_endpoint
             && self.tracing_sample_ratio == other.tracing_sample_ratio
             && self.append_stdout == other.append_stdout
+            && self.max_log_files == other.max_log_files
     }
 }
 
@@ -96,6 +100,7 @@ impl Default for LoggingOptions {
             otlp_endpoint: None,
             tracing_sample_ratio: None,
             append_stdout: true,
+            max_log_files: 6,
         }
     }
 }
@@ -186,8 +191,12 @@ pub fn init_global_logging(
 
         // Configure the file logging layer with rolling policy.
         let file_logging_layer = if !opts.dir.is_empty() {
-            let rolling_appender =
-                RollingFileAppender::new(Rotation::HOURLY, &opts.dir, "greptimedb");
+            let rolling_appender = RollingFileAppender::builder()
+                .rotation(Rotation::HOURLY)
+                .max_log_files(opts.max_log_files)
+                .filename_prefix("greptimedb")
+                .build(&opts.dir)
+                .expect("initializing rolling file appender failed");
             let (writer, guard) = tracing_appender::non_blocking(rolling_appender);
             guards.push(guard);
 
@@ -208,8 +217,12 @@ pub fn init_global_logging(
 
         // Configure the error file logging layer with rolling policy.
         let err_file_logging_layer = if !opts.dir.is_empty() {
-            let rolling_appender =
-                RollingFileAppender::new(Rotation::HOURLY, &opts.dir, "greptimedb-err");
+            let rolling_appender = RollingFileAppender::builder()
+                .rotation(Rotation::HOURLY)
+                .filename_prefix("greptimedb-err")
+                .max_log_files(opts.max_log_files)
+                .build(&opts.dir)
+                .expect("initializing rolling file appender failed");
             let (writer, guard) = tracing_appender::non_blocking(rolling_appender);
             guards.push(guard);
 
